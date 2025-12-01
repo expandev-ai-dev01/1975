@@ -24,6 +24,12 @@ export type AssessmentType =
 export type Period = '1º Bimestre' | '2º Bimestre' | '3º Bimestre' | '4º Bimestre' | 'Recuperação';
 
 /**
+ * @type AttendanceStatus
+ * @description Valid attendance status values
+ */
+export type AttendanceStatus = 'Presente' | 'Ausente' | 'Dispensado';
+
+/**
  * @interface GradeEntity
  * @description Represents a grade entity
  */
@@ -37,6 +43,7 @@ export interface GradeEntity {
   assessmentDate: string;
   weight: number;
   observations: string | null;
+  attendanceStatus: AttendanceStatus;
   dateCreated: string;
   dateModified: string;
 }
@@ -54,6 +61,7 @@ export interface GradeCreateRequest {
   assessmentDate: string;
   weight?: number;
   observations?: string | null;
+  attendanceStatus?: AttendanceStatus;
 }
 
 /**
@@ -86,7 +94,8 @@ export interface GradeHistoryResponse {
   period: Period;
   gradeValue: number;
   assessmentDate: string;
-  calculatedAverage: number;
+  attendanceStatus: AttendanceStatus;
+  calculatedAverage: number | string;
   insufficientAssessments: boolean;
 }
 
@@ -104,5 +113,6 @@ export interface GradeBatchCreateRequest {
   grades: Array<{
     studentId: number;
     gradeValue: number;
+    attendanceStatus?: AttendanceStatus;
   }>;
 }

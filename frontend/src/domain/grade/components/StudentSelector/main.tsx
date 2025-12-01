@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { Input } from '@/core/components/input';
 import { Button } from '@/core/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/core/components/card';
-import { Search, User } from 'lucide-react';
+import { Search, User, History } from 'lucide-react';
 import { useStudentList } from '../../hooks/useStudentList';
 import { LoadingSpinner } from '@/core/components/loading-spinner';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/core/components/empty';
+import { useNavigation } from '@/core/hooks/useNavigation';
 import type { StudentSelectorProps } from './types';
 
 function StudentSelector({ onSelectStudent }: StudentSelectorProps) {
   const [search, setSearch] = useState('');
   const { students, isLoading } = useStudentList({ search });
+  const { navigate } = useNavigation();
 
   return (
     <Card>
@@ -46,20 +48,31 @@ function StudentSelector({ onSelectStudent }: StudentSelectorProps) {
         ) : (
           <div className="space-y-2">
             {students.map((student) => (
-              <Button
+              <div
                 key={student.id}
-                variant="outline"
-                className="h-auto w-full justify-start p-4 text-left"
-                onClick={() => onSelectStudent(student)}
+                className="flex items-center gap-2 rounded-lg border p-4 transition-all hover:shadow-md"
               >
-                <User className="size-5 mr-3" />
+                <User className="size-5 text-muted-foreground" />
                 <div className="flex-1">
                   <div className="font-medium">{student.name}</div>
                   <div className="text-muted-foreground text-sm">
                     {student.registrationNumber} • {student.className}
                   </div>
                 </div>
-              </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/grades/history/${student.id}`)}
+                  >
+                    <History className="size-4 mr-2" />
+                    Histórico
+                  </Button>
+                  <Button size="sm" onClick={() => onSelectStudent(student)}>
+                    Registrar Nota
+                  </Button>
+                </div>
+              </div>
             ))}
           </div>
         )}

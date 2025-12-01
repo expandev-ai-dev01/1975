@@ -46,16 +46,28 @@ export async function gradeCreate(body: unknown): Promise<GradeEntity> {
   const now = new Date().toISOString();
   const id = gradeStore.getNextId();
 
+  const attendanceStatus = params.attendanceStatus ?? 'Presente';
+  let gradeValue = params.gradeValue;
+
+  /**
+   * @rule {be-business-rule-040}
+   * When attendance status is 'Ausente', mark grade as N/A (0)
+   */
+  if (attendanceStatus === 'Ausente') {
+    gradeValue = 0;
+  }
+
   const newGrade: GradeEntity = {
     id,
     studentId: params.studentId,
     subjectId: params.subjectId,
     assessmentType: params.assessmentType,
     period: params.period,
-    gradeValue: params.gradeValue,
+    gradeValue,
     assessmentDate: params.assessmentDate,
     weight: params.weight ?? GRADE_DEFAULTS.WEIGHT,
     observations: params.observations ?? null,
+    attendanceStatus,
     dateCreated: now,
     dateModified: now,
   };
@@ -150,21 +162,27 @@ export async function gradeUpdate(params: unknown, body: unknown): Promise<Grade
     throw new ServiceError('NOT_FOUND', 'Grade not found', 404);
   }
 
-  // Check if grade is older than 30 days
+  /**
+   * @rule {be-business-rule-010}
+   * Check if grade is older than 30 days
+   */
   const gradeDate = new Date(existing.dateCreated);
   const daysDiff = Math.floor((Date.now() - gradeDate.getTime()) / (1000 * 60 * 60 * 24));
-  const requiresAuthorization = daysDiff > 30;
+  const requiresAuthorization = daysDiff > GRADE_DEFAULTS.EDIT_AUTHORIZATION_DAYS;
 
   if (requiresAuthorization) {
     if (!bodyValidation.data.justification || !bodyValidation.data.authorizationCode) {
       throw new ServiceError(
         'AUTHORIZATION_REQUIRED',
-        'Justification and authorization code required for grades older than 30 days',
+        `Justification and authorization code required for grades older than ${GRADE_DEFAULTS.EDIT_AUTHORIZATION_DAYS} days`,
         403
       );
     }
 
-    // Validate authorization code
+    /**
+     * @rule {be-business-rule-042}
+     * Validate authorization code
+     */
     const isValid = authorizationCodeStore.validate(
       bodyValidation.data.authorizationCode,
       'Edição de Nota'
@@ -246,21 +264,27 @@ export async function gradeDelete(params: unknown, body: unknown): Promise<{ mes
     throw new ServiceError('NOT_FOUND', 'Grade not found', 404);
   }
 
-  // Check if grade is older than 7 days
+  /**
+   * @rule {be-business-rule-015}
+   * Check if grade is older than 7 days
+   */
   const gradeDate = new Date(existing.dateCreated);
   const daysDiff = Math.floor((Date.now() - gradeDate.getTime()) / (1000 * 60 * 60 * 24));
-  const requiresAuthorization = daysDiff > 7;
+  const requiresAuthorization = daysDiff > GRADE_DEFAULTS.DELETE_AUTHORIZATION_DAYS;
 
   if (requiresAuthorization) {
     if (!bodyValidation.data.authorizationCode) {
       throw new ServiceError(
         'AUTHORIZATION_REQUIRED',
-        'Authorization code required for grades older than 7 days',
+        `Authorization code required for grades older than ${GRADE_DEFAULTS.DELETE_AUTHORIZATION_DAYS} days`,
         403
       );
     }
 
-    // Validate authorization code
+    /**
+     * @rule {be-business-rule-044}
+     * Validate authorization code
+     */
     const isValid = authorizationCodeStore.validate(
       bodyValidation.data.authorizationCode,
       'Exclusão de Nota'
@@ -359,15 +383,39 @@ export async function gradeListByStudent(
       .getByStudentId(studentId)
       .filter((sg) => sg.subjectId === g.subjectId && sg.period === g.period);
 
-    const totalWeightedGrade = subjectPeriodGrades.reduce(
-      (sum, sg) => sum + sg.gradeValue * sg.weight,
-      0
-    );
-    const totalWeight = subjectPeriodGrades.reduce((sum, sg) => sum + sg.weight, 0);
-    const calculatedAverage = totalWeight > 0 ? totalWeightedGrade / totalWeight : 0;
+    /**
+     * @rule {be-business-rule-048}
+     * Filter out grades with 'Ausente' status from average calculation
+     */
+    const validGrades = subjectPeriodGrades.filter((sg) => sg.attendanceStatus !== 'Ausente');
 
+    /**
+     * @rule {be-business-rule-046}
+     * Check for minimum assessments
+     */
     const insufficientAssessments =
-      subjectPeriodGrades.length < GRADE_DEFAULTS.MINIMUM_ASSESSMENTS_PER_PERIOD;
+      validGrades.length < GRADE_DEFAULTS.MINIMUM_ASSESSMENTS_PER_PERIOD;
+
+    let calculatedAverage: number | string = 'N/D';
+
+    if (!insufficientAssessments) {
+      /**
+       * @rule {be-business-rule-021}
+       * Calculate weighted average
+       */
+      const totalWeightedGrade = validGrades.reduce(
+        (sum, sg) => sum + sg.gradeValue * sg.weight,
+        0
+      );
+      const totalWeight = validGrades.reduce((sum, sg) => sum + sg.weight, 0);
+
+      /**
+       * @rule {be-business-rule-059}
+       * Apply standard mathematical rounding
+       */
+      const rawAverage = totalWeight > 0 ? totalWeightedGrade / totalWeight : 0;
+      calculatedAverage = Math.round(rawAverage * 10) / 10;
+    }
 
     return {
       id: g.id,
@@ -376,6 +424,7 @@ export async function gradeListByStudent(
       period: g.period,
       gradeValue: g.gradeValue,
       assessmentDate: g.assessmentDate,
+      attendanceStatus: g.attendanceStatus,
       calculatedAverage,
       insufficientAssessments,
     };
@@ -392,14 +441,14 @@ export async function gradeListByStudent(
  * @module services/grade
  *
  * @param {unknown} body - Raw request body with batch data
- * @returns {Promise<{ created: number; grades: Array<{ id: number; studentId: number; gradeValue: number }> }>} Batch creation result
+ * @returns {Promise<{ created: number; grades: Array<{ id: number; studentId: number; gradeValue: number; attendanceStatus: string }> }>} Batch creation result
  *
  * @throws {ServiceError} VALIDATION_ERROR (400) - When validation fails
  * @throws {ServiceError} NO_GRADES (400) - When no grades provided
  */
 export async function gradeBatchCreate(body: unknown): Promise<{
   created: number;
-  grades: Array<{ id: number; studentId: number; gradeValue: number }>;
+  grades: Array<{ id: number; studentId: number; gradeValue: number; attendanceStatus: string }>;
 }> {
   const validation = batchCreateSchema.safeParse(body);
 
@@ -414,10 +463,25 @@ export async function gradeBatchCreate(body: unknown): Promise<{
   }
 
   const now = new Date().toISOString();
-  const createdGrades: Array<{ id: number; studentId: number; gradeValue: number }> = [];
+  const createdGrades: Array<{
+    id: number;
+    studentId: number;
+    gradeValue: number;
+    attendanceStatus: string;
+  }> = [];
 
   for (const gradeData of params.grades) {
     const id = gradeStore.getNextId();
+    const attendanceStatus = gradeData.attendanceStatus ?? 'Presente';
+    let gradeValue = gradeData.gradeValue;
+
+    /**
+     * @rule {be-business-rule-050}
+     * When attendance status is 'Ausente', mark grade as N/A (0)
+     */
+    if (attendanceStatus === 'Ausente') {
+      gradeValue = 0;
+    }
 
     const newGrade: GradeEntity = {
       id,
@@ -425,10 +489,11 @@ export async function gradeBatchCreate(body: unknown): Promise<{
       subjectId: params.subjectId,
       assessmentType: params.assessmentType,
       period: params.period,
-      gradeValue: gradeData.gradeValue,
+      gradeValue,
       assessmentDate: params.assessmentDate,
       weight: params.weight ?? GRADE_DEFAULTS.WEIGHT,
       observations: null,
+      attendanceStatus,
       dateCreated: now,
       dateModified: now,
     };
@@ -437,7 +502,8 @@ export async function gradeBatchCreate(body: unknown): Promise<{
     createdGrades.push({
       id,
       studentId: gradeData.studentId,
-      gradeValue: gradeData.gradeValue,
+      gradeValue,
+      attendanceStatus,
     });
 
     // Log audit

@@ -26,6 +26,7 @@ export const createSchema = z.object({
   assessmentDate: z.string().datetime(),
   weight: z.number().min(GRADE_LIMITS.WEIGHT_MIN).max(GRADE_LIMITS.WEIGHT_MAX).optional(),
   observations: z.string().max(GRADE_LIMITS.OBSERVATIONS_MAX_LENGTH).nullable().optional(),
+  attendanceStatus: z.enum(['Presente', 'Ausente', 'Dispensado']).optional(),
 });
 
 /**
@@ -95,6 +96,7 @@ export const batchCreateSchema = z.object({
         .refine((val) => Number(val.toFixed(1)) === val, {
           message: 'Grade must have at most one decimal place',
         }),
+      attendanceStatus: z.enum(['Presente', 'Ausente', 'Dispensado']).optional(),
     })
   ),
 });

@@ -9,6 +9,12 @@ const HomePage = lazy(() =>
 const GradeRegistrationPage = lazy(() =>
   import('@/pages/GradeRegistration').then((module) => ({ default: module.GradeRegistrationPage }))
 );
+const GradeEditPage = lazy(() =>
+  import('@/pages/GradeEdit').then((module) => ({ default: module.GradeEditPage }))
+);
+const GradeHistoryPage = lazy(() =>
+  import('@/pages/GradeHistory').then((module) => ({ default: module.GradeHistoryPage }))
+);
 const NotFoundPage = lazy(() =>
   import('@/pages/NotFound').then((module) => ({ default: module.NotFoundPage }))
 );
@@ -35,6 +41,14 @@ const routes = createBrowserRouter([
       {
         path: 'grades/register',
         element: <GradeRegistrationPage />,
+      },
+      {
+        path: 'grades/edit/:id',
+        element: <GradeEditPage />,
+      },
+      {
+        path: 'grades/history/:studentId',
+        element: <GradeHistoryPage />,
       },
       {
         path: '*',
